@@ -34,6 +34,7 @@ data GameSpace = GameSpace
         , _gsTotalKills :: Int
         , _gsKillCount  :: Int
         , _gsScore      :: Int
+        , _gsKeysDown   :: Int
         , _gsMove       :: Maybe Direction
         , _gsLocation   :: Point
         , _gsGoblins    :: [Point]
@@ -49,6 +50,7 @@ newGame = GameSpace
         , _gsTotalKills = 0
         , _gsKillCount  = 0
         , _gsScore      = 0
+        , _gsKeysDown   = 0
         , _gsMove       = Nothing
         , _gsLocation   = (0,0)
         , _gsGoblins    = []
@@ -79,7 +81,7 @@ gsUpdate delta acts = do
                   else do
                     setStateL gsPace 1
                     return 1
-        modStateL gsStamina $ subtract $ fromIntegral pace * delta
+        modStateL gsStamina $ subtract $ fromIntegral pace * delta / 2
         modStateL gsLocation $ incPoint dir $ fromIntegral pace * delta
         )
     mapM_ (gsDoAction delta) acts

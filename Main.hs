@@ -27,7 +27,7 @@ type SpriteMap = Map.Map String SDL.Surface
 
 -- | The rate of movement in pix / ms
 rate :: Double
-rate = 1 / 100
+rate = 1 / 50
 
 -- | The size of the header info bar
 header :: Int
@@ -35,29 +35,31 @@ header = 10
 
 main = do
     putStr "Loading sprites ..."
-    sprites <- loadSprites "res" 
-        [ "Hobgoblin"
-        , "Man"
-        , "ManWithShield"
-        ]
+    sprites <- loadSprites
     putStrLn " done."
     putStr "Initializing SDL ..."
     SDL.init [SDL.InitVideo, SDL.InitEventthread, SDL.InitTimer]
-    SDL.setVideoMode 640 480 32 
+    SDL.setVideoMode 0 0 32 
         [ SDL.DoubleBuf
         , SDL.HWSurface
-        , SDL.Resizable
+        , SDL.Fullscreen
         ]
     SDL.setCaption "Hobgoblin" "hobgoblin"
     putStrLn " done."
     startGame sprites
     putStrLn "Thanks for playing!"
 
-loadSprites :: String -> [String] -> IO SpriteMap
-loadSprites dir paths = fmap Map.fromList $ mapM loadSprite paths
-  where loadSprite imgName = do
-            sprite <- SDLi.load $ dir ++ '/' : imgName ++ "_20x40.png"
-            return (imgName, sprite)
+loadSprites :: IO SpriteMap
+loadSprites = flip execStateT Map.empty $ do
+    insertS "Man" "Man_20x40.png"
+    insertS "ManWithShield" "ManWithShield_20x40.png"
+    insertS "Hobgoblin" "Hobgoblin_20x40.png"
+    insertS "HobSkull" "HobSkull_7x7.png"
+  where dir = ("res/"++)
+        insertS :: String -> String -> StateT SpriteMap IO ()
+        insertS name file = do
+            sprite <- lift $ SDLi.load $ dir file
+            modify (Map.insert name $ sprite)       
 
 testSDL :: SpriteMap -> IO ()
 testSDL sprites = do
@@ -98,19 +100,19 @@ getScreenSize = do
     return (w, h)
 
 -- | Draw the initial Boxes for the Header
-initHeader :: Maybe Int -> GameState IO ()
-initHeader mw = do
-    w <- case mw of
-            Just w -> return w
-            Nothing -> fmap (getL fstLens) $ lift getScreenSize
+initHeader :: SpriteMap -> Int -> GameState IO ()
+initHeader sprites w = do
     screen <- lift SDL.getVideoSurface
     let pxlfmt = SDL.surfaceGetPixelFormat screen
     blue <- lift $ SDL.mapRGB pxlfmt 0 0 255
     green <- lift $ SDL.mapRGB pxlfmt 0 255 0
     white <- lift $ SDL.mapRGB pxlfmt 255 255 255
+    let Just hobSkull = Map.lookup "HobSkull" sprites
     lift $ SDL.fillRect screen (Just $ SDL.Rect 1 1 102 7) blue
     lift $ SDL.fillRect screen (Just $ SDL.Rect 105 1 102 7) green
     lift $ SDL.fillRect screen (Just $ SDL.Rect 0 9 w 1) white
+    lift $ SDL.blitSurface hobSkull Nothing screen $ Just $
+        SDL.Rect 209 1 7 7
     return ()
 
 playGame :: SpriteMap -> GameState IO ()
@@ -121,7 +123,7 @@ playGame sprites = do
         (fromIntegral w / 2 - 10, 
         (fromIntegral h + fromIntegral header) / 2 - 20)
     genGoblin
-    initHeader $ Just w
+    initHeader sprites w
     -- We seed the game loop with 1 frame having passed
     gameLoop (1 / rate) sprites
     -- Add score reporting and high scores here
@@ -216,26 +218,34 @@ gameLoop delta sprites = flip runContT return $ callCC $ \exit -> do
             forM_ events $ \event -> do
               case event of
                 SDL.Quit -> exit ()
+                SDL.KeyDown Keysym{symKey=SDLK_ESCAPE} -> exit ()
                 SDL.VideoResize w _ -> do
-                    lift $ initHeader $ Just w
+                    lift $ initHeader sprites w
                     lift $ gsDrawSpace
                 SDL.KeyDown Keysym{symKey=SDLK_q} -> 
                     addAction incActsRef $ IncPace 1
                 SDL.KeyDown Keysym{symKey=SDLK_e} -> 
                     addAction incActsRef $ IncPace (-1)
-                SDL.KeyDown Keysym{symKey=SDLK_w} -> 
+                SDL.KeyDown Keysym{symKey=SDLK_w} -> do
+                    modStateL gsKeysDown (+1)
                     addAction otherActsRef $ Move $ Just North
-                SDL.KeyDown Keysym{symKey=SDLK_s} -> 
+                SDL.KeyDown Keysym{symKey=SDLK_s} -> do
+                    modStateL gsKeysDown (+1)
                     addAction otherActsRef $ Move $ Just South
-                SDL.KeyDown Keysym{symKey=SDLK_a} -> 
+                SDL.KeyDown Keysym{symKey=SDLK_a} -> do
+                    modStateL gsKeysDown (+1)
                     addAction otherActsRef $ Move $ Just West
-                SDL.KeyDown Keysym{symKey=SDLK_d} -> 
+                SDL.KeyDown Keysym{symKey=SDLK_d} -> do
+                    modStateL gsKeysDown (+1)
                     addAction otherActsRef $ Move $ Just East
                 SDL.KeyDown Keysym{symKey=SDLK_SPACE} -> 
                     addAction otherActsRef ToggleShield
                 SDL.KeyUp Keysym{symKey=key} -> 
-                    when (key `elem` [SDLK_w,SDLK_s,SDLK_a,SDLK_d]) $
-                        addAction otherActsRef $ Move Nothing
+                    when (key `elem` [SDLK_w,SDLK_s,SDLK_a,SDLK_d]) $ do
+                        modStateL gsKeysDown $ subtract 1
+                        kdown <- getStateL gsKeysDown
+                        when (kdown <= 0) $
+                            addAction otherActsRef $ Move Nothing
                 _ -> return ()
             incActs <- lift2 $ readIORef incActsRef
             otherActs <- lift2 $ readIORef otherActsRef
