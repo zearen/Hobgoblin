@@ -136,7 +136,8 @@ genGoblin = do
     (w, h) <- lift getScreenSize
     (px, py) <- getStateL gsLocation
     gx <- fmap (avoid px) $ lift $ randomRIO (0, fromIntegral w - 40)
-    gy <- fmap (avoid py) $ lift $ randomRIO (0, fromIntegral h - 40)
+    gy <- fmap (avoid py . (+fromIntegral header)) $ lift $ randomRIO
+        (0, fromIntegral h - 40 - fromIntegral header)
     modStateL gsGoblins ((gx, gy):)
   where avoid obs val = ((val + 20) ?? val) $ 0 <= delta && delta < 20
           where delta = val - obs
@@ -184,10 +185,14 @@ gameLoop delta sprites = flip runContT return $ callCC $ \exit -> do
             -- Draw header
             power <- getStateL gsPower
             stamina <- getStateL gsStamina
-            lift $ SDL.fillRect screen 
-                (Just $ SDL.Rect 2 2 (floor power) 5) lblue
-            lift $ SDL.fillRect screen 
-                (Just $ SDL.Rect 106 2 (floor stamina) 5) lgreen
+            when (power >= 1) $ do
+                lift $ SDL.fillRect screen 
+                    (Just $ SDL.Rect 2 2 (floor power) 5) lblue
+                return ()
+            when (stamina >= 1) $ do 
+                lift $ SDL.fillRect screen 
+                    (Just $ SDL.Rect 106 2 (floor stamina) 5) lgreen
+                return ()
             -- Draw goblins
             goblins <- getStateL gsGoblins
             let (Just gobSurf) = Map.lookup "Hobgoblin" sprites
@@ -211,6 +216,9 @@ gameLoop delta sprites = flip runContT return $ callCC $ \exit -> do
             forM_ events $ \event -> do
               case event of
                 SDL.Quit -> exit ()
+                SDL.VideoResize w _ -> do
+                    lift $ initHeader $ Just w
+                    lift $ gsDrawSpace
                 SDL.KeyDown Keysym{symKey=SDLK_q} -> 
                     addAction incActsRef $ IncPace 1
                 SDL.KeyDown Keysym{symKey=SDLK_e} -> 

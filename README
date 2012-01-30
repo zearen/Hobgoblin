@@ -1,3 +1,24 @@
 $ ghc -threaded Main.hs
+$ ./Main.hs
+
+> Install deps from cabal until ghc stops yelling at you.
+
+Dependendies I'm aware of:
+
+state
+random
+data-lens
+data-lens-template
+SDL
+SDL-image
+SDL-ttf
 
 cabal build coming soon™
+
+Real quick how-to-play
+
+The blue bar is your shield strength.  It gets used up when you use your 
+shield by pressing SPACE.  The green bar is you stamina.  It gets used up 
+when you move.  The faster you move, the faster it gets used up.  To go 
+faster press Q, and slower press E.  Move with WASD.  If a goblin hits you
+while your shield is up, you kill it.  Otherwise, it kills you.
