@@ -1,0 +1,3 @@
+$ ghc -threaded Main.hs
+
+cabal build coming soon™
