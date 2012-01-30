@@ -34,6 +34,7 @@ data GameSpace = GameSpace
         , _gsTotalKills :: Int
         , _gsKillCount  :: Int
         , _gsScore      :: Int
+        , _gsMove       :: Maybe Direction
         , _gsLocation   :: Point
         , _gsGoblins    :: [Point]
         }
@@ -48,6 +49,7 @@ newGame = GameSpace
         , _gsTotalKills = 0
         , _gsKillCount  = 0
         , _gsScore      = 0
+        , _gsMove       = Nothing
         , _gsLocation   = (0,0)
         , _gsGoblins    = []
         }
@@ -55,10 +57,9 @@ newGame = GameSpace
 $(makeLens ''GameSpace)
 
 -- | Possible actions by the user
-data Action = Move Direction
+data Action = Move (Maybe Direction)
             | ToggleShield
             | IncPace Int
-
 
 -- | Update the gamespace.  Call this every cycle.
 -- It's important that the list of actions contains
@@ -69,6 +70,18 @@ gsUpdate delta acts = do
     gsMoveGoblins delta
     getStateL gsStamina >>=
         flip when (modStateL gsStamina (+delta)) . (<100)
+    -- Check if we need to move
+    getStateL gsMove >>= maybe (return ()) (\dir -> do
+        pace <- getStateL gsPace
+        stamina <- getStateL gsStamina
+        pace <- if pace <= floor stamina
+                  then return pace
+                  else do
+                    setStateL gsPace 1
+                    return 1
+        modStateL gsStamina $ subtract $ fromIntegral pace * delta
+        modStateL gsLocation $ incPoint dir $ fromIntegral pace * delta
+        )
     mapM_ (gsDoAction delta) acts
     shield <- handleShield
     (hit, missed) <- gsPartitionGoblins
@@ -100,16 +113,8 @@ gsUpdate delta acts = do
 
 -- | Performs the specified game action
 gsDoAction :: Monad m => Double -> Action -> GameState m ()
-gsDoAction delta (Move dir) = do
-    pace <- getStateL gsPace
-    stamina <- getStateL gsStamina
-    pace <- if pace <= floor stamina
-              then return pace
-              else do
-                setStateL gsPace 1
-                return 1
-    modStateL gsStamina $ subtract $ fromIntegral pace
-    modStateL gsLocation $ incPoint dir $ fromIntegral pace * delta
+gsDoAction delta (Move mdir) =
+    setStateL gsMove mdir
 gsDoAction _ ToggleShield = do
     getStateL gsShield >>= flip when (setStateL gsKillCount 0)
     modStateL gsShield not

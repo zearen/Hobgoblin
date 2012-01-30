@@ -211,9 +211,26 @@ gameLoop delta sprites = flip runContT return $ callCC $ \exit -> do
             forM_ events $ \event -> do
               case event of
                 SDL.Quit -> exit ()
+                SDL.KeyDown Keysym{symKey=SDLK_q} -> 
+                    addAction incActsRef $ IncPace 1
+                SDL.KeyDown Keysym{symKey=SDLK_e} -> 
+                    addAction incActsRef $ IncPace (-1)
+                SDL.KeyDown Keysym{symKey=SDLK_w} -> 
+                    addAction otherActsRef $ Move $ Just North
+                SDL.KeyDown Keysym{symKey=SDLK_s} -> 
+                    addAction otherActsRef $ Move $ Just South
+                SDL.KeyDown Keysym{symKey=SDLK_a} -> 
+                    addAction otherActsRef $ Move $ Just West
+                SDL.KeyDown Keysym{symKey=SDLK_d} -> 
+                    addAction otherActsRef $ Move $ Just East
                 SDL.KeyDown Keysym{symKey=SDLK_SPACE} -> 
-                    lift2 $ modifyIORef otherActsRef (.(ToggleShield:))
+                    addAction otherActsRef ToggleShield
+                SDL.KeyUp Keysym{symKey=key} -> 
+                    when (key `elem` [SDLK_w,SDLK_s,SDLK_a,SDLK_d]) $
+                        addAction otherActsRef $ Move Nothing
                 _ -> return ()
             incActs <- lift2 $ readIORef incActsRef
             otherActs <- lift2 $ readIORef otherActsRef
             return $ (incActs . otherActs) []
+          where addAction ioRef action =
+                    lift2 $ modifyIORef ioRef (.(action:))
