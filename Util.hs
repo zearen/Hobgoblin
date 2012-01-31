@@ -35,5 +35,4 @@ setStateL = modify .: setL
 modStateL :: MonadState s m => Lens s a -> (a -> a) -> m ()
 modStateL = modify .: modL
 
-
 lift2 m = lift $ lift m

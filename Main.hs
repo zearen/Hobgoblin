@@ -18,12 +18,14 @@ import qualified Data.Map as Map
 import qualified Graphics.UI.SDL as SDL
 import Graphics.UI.SDL.Keysym
 import qualified Graphics.UI.SDL.Image as SDLi
+import qualified Graphics.UI.SDL.TTF as SDLt
 
 import GameSpace
 import Util
 import Plane
 
 type SpriteMap = Map.Map String SDL.Surface
+type FontMap   = Map.Map String SDLt.Font
 
 -- | The rate of movement in pix / ms
 rate :: Double
@@ -33,12 +35,14 @@ rate = 1 / 50
 header :: Int
 header = 10
 
+-- | The resource directory
+resDir :: String -> String
+resDir = ("res/"++)
+
 main = do
-    putStr "Loading sprites ..."
-    sprites <- loadSprites
-    putStrLn " done."
     putStr "Initializing SDL ..."
     SDL.init [SDL.InitVideo, SDL.InitEventthread, SDL.InitTimer]
+    SDLt.init
     SDL.setVideoMode 0 0 32 
         [ SDL.DoubleBuf
         , SDL.HWSurface
@@ -46,7 +50,7 @@ main = do
         ]
     SDL.setCaption "Hobgoblin" "hobgoblin"
     putStrLn " done."
-    startGame sprites
+    startGame
     putStrLn "Thanks for playing!"
 
 loadSprites :: IO SpriteMap
@@ -54,36 +58,34 @@ loadSprites = flip execStateT Map.empty $ do
     insertS "Man" "Man_20x40.png"
     insertS "ManWithShield" "ManWithShield_20x40.png"
     insertS "Hobgoblin" "Hobgoblin_20x40.png"
+    insertS "Boot" "Boot_7x7.png"
     insertS "HobSkull" "HobSkull_7x7.png"
-  where dir = ("res/"++)
-        insertS :: String -> String -> StateT SpriteMap IO ()
+    insertS "Coin" "Coin_7x7.png"
+  where insertS :: String -> String -> StateT SpriteMap IO ()
         insertS name file = do
-            sprite <- lift $ SDLi.load $ dir file
+            sprite <- lift $ SDLi.load $ resDir file
             modify (Map.insert name $ sprite)       
 
-testSDL :: SpriteMap -> IO ()
-testSDL sprites = do
-    screen <- SDL.getVideoSurface
-    locRef <- newIORef (10, 10)
-    forM_ (Map.elems sprites) $ \img -> do
-        loc <- readIORef locRef
-        SDL.blitSurface img Nothing screen $ Just 
-            $ pointSize2Rect loc (20, 40)
-        modifyIORef locRef $ modL fstLens (+30)
-    SDL.flip screen
-    eventLoop
-  where eventLoop = do
-            event <- SDL.waitEvent
-            case event of
-                SDL.Quit -> return ()
-                _        -> eventLoop
+loadFonts :: IO FontMap
+loadFonts = flip execStateT Map.empty $ do
+    insertF "Georgia7" "georgia.ttf" 7
+    insertF "Georgia24" "georgia.ttf" 24
+  where insertF :: String -> String -> Int -> StateT FontMap IO ()
+        insertF name file point = do
+            font <- lift $ SDLt.openFont (resDir file) point
+            modify (Map.insert name $ font)
 
-startGame :: SpriteMap -> IO ()
-startGame sprites = do
+   
+startGame :: IO ()
+startGame = do
+    putStr "Loading sprites ..."
+    sprites <- loadSprites
+    fonts <- loadFonts
+    putStrLn " done."
     putStrLn "Starting new game"
-    execStateT (playGame sprites) newGame
+    execStateT (playGame sprites fonts) newGame
     putStrLn "Game Over"
-    promptNewGame >>= (startGame sprites ?? return ())
+    promptNewGame >>= (startGame ?? return ())
 
 promptNewGame = return False
 
@@ -107,7 +109,9 @@ initHeader sprites w = do
     blue <- lift $ SDL.mapRGB pxlfmt 0 0 255
     green <- lift $ SDL.mapRGB pxlfmt 0 255 0
     white <- lift $ SDL.mapRGB pxlfmt 255 255 255
+    let Just boot = Map.lookup "Boot" sprites
     let Just hobSkull = Map.lookup "HobSkull" sprites
+    let Just coin = Map.lookup "Coin" sprites
     lift $ SDL.fillRect screen (Just $ SDL.Rect 1 1 102 7) blue
     lift $ SDL.fillRect screen (Just $ SDL.Rect 105 1 102 7) green
     lift $ SDL.fillRect screen (Just $ SDL.Rect 0 9 w 1) white
@@ -115,8 +119,8 @@ initHeader sprites w = do
         SDL.Rect 209 1 7 7
     return ()
 
-playGame :: SpriteMap -> GameState IO ()
-playGame sprites = do
+playGame :: SpriteMap -> FontMap -> GameState IO ()
+playGame sprites fonts = do
     -- We place the character in the middle and add an initial monster
     (w, h) <- lift getScreenSize
     setStateL gsLocation 
@@ -125,12 +129,17 @@ playGame sprites = do
     genGoblin
     initHeader sprites w
     -- We seed the game loop with 1 frame having passed
-    gameLoop (1 / rate) sprites
+    gameLoop (1 / rate) sprites fonts
     -- Add score reporting and high scores here
-    lift $ putStr "Total Kills: "
-    getStateL gsTotalKills >>= lift . print
-    lift $ putStr "Score: "
-    getStateL gsScore >>= lift . print
+    kills <- getStateL gsTotalKills
+    score <- getStateL gsScore
+    when (kills > 0) $ lift $ do
+        putStr "Total Kills: "
+        print kills
+        putStr "Score: "
+        print score
+        putStr "Skill Rating: "
+        print $ score `div` kills
 
 -- | Generates a random monster that does not hit the player
 genGoblin :: GameState IO ()
@@ -144,9 +153,9 @@ genGoblin = do
   where avoid obs val = ((val + 20) ?? val) $ 0 <= delta && delta < 20
           where delta = val - obs
 
-gameLoop delta sprites = flip runContT return $ callCC $ \exit -> do
-    startTime <- lift2 SDL.getTicks
+gameLoop delta sprites fonts = flip runContT return $ callCC $ \exit -> do
     actions <- handleEvents exit
+    startTime <- lift2 SDL.getTicks
     lift $ do 
         clearScreen
         mKills <- gsUpdate (delta * rate) actions
@@ -158,7 +167,7 @@ gameLoop delta sprites = flip runContT return $ callCC $ \exit -> do
             Nothing -> return ()
             Just kills -> do
                 replicateM_ (kills * 2) genGoblin
-                gameLoop elapTime sprites
+                gameLoop elapTime sprites fonts
   where clearScreen :: GameState IO ()
         clearScreen = do
             -- Prepare resources for drawing
@@ -168,6 +177,7 @@ gameLoop delta sprites = flip runContT return $ callCC $ \exit -> do
             -- Clear header
             lift $ SDL.fillRect screen (Just $ SDL.Rect 2 2 100 5) black
             lift $ SDL.fillRect screen (Just $ SDL.Rect 106 2 100 5) black
+            -- TODO: clear text
             -- Clear goblins
             goblins <- getStateL gsGoblins
             forM_ goblins $ lift . flip (SDL.fillRect screen) black 
@@ -195,6 +205,7 @@ gameLoop delta sprites = flip runContT return $ callCC $ \exit -> do
                 lift $ SDL.fillRect screen 
                     (Just $ SDL.Rect 106 2 (floor stamina) 5) lgreen
                 return ()
+            drawHeaderText
             -- Draw goblins
             goblins <- getStateL gsGoblins
             let (Just gobSurf) = Map.lookup "Hobgoblin" sprites
@@ -208,6 +219,10 @@ gameLoop delta sprites = flip runContT return $ callCC $ \exit -> do
             lift $ SDL.blitSurface manSurf Nothing screen $ Just $ 
                 pointSize2Rect loc (20, 40)
             return ()
+        drawHeaderText :: GameState IO ()
+        drawHeaderText = do
+            -- TODO: Write me
+            return ()
         -- Holy shit, Dat type!
         handleEvents :: (() -> ContT () (StateT GameSpace IO) ()) ->
             ContT () (StateT GameSpace IO) [Action]
@@ -217,15 +232,35 @@ gameLoop delta sprites = flip runContT return $ callCC $ \exit -> do
             events <- lift2 $ pollEvents
             forM_ events $ \event -> do
               case event of
+                -- Exiting and other events
                 SDL.Quit -> exit ()
                 SDL.KeyDown Keysym{symKey=SDLK_ESCAPE} -> exit ()
                 SDL.VideoResize w _ -> do
                     lift $ initHeader sprites w
                     lift $ gsDrawSpace
+                -- Do Pause
+                SDL.KeyDown Keysym{symKey=SDLK_p} -> do
+                    screen <- lift2 $ SDL.getVideoSurface
+                    let pxlfmt = SDL.surfaceGetPixelFormat screen
+                    black <- lift2 $ SDL.mapRGB pxlfmt 0 0 0
+                    let Just font = Map.lookup "Georgia24" fonts
+                    fntSurf <- lift2 $ SDLt.renderTextSolid font "Pause"
+                        $ SDL.Color 255 255 255
+                    rect <- lift2 $ blitCenter fntSurf
+                    lift2 $ SDL.flip screen
+                    keyDelta <- lift2 $ pause fonts
+                    modStateL gsKeysDown (+keyDelta)
+                    lift2 $ SDL.fillRect screen (Just rect) black
+                    return ()
+                -- Pace Control
                 SDL.KeyDown Keysym{symKey=SDLK_q} -> 
                     addAction incActsRef $ IncPace 1
                 SDL.KeyDown Keysym{symKey=SDLK_e} -> 
                     addAction incActsRef $ IncPace (-1)
+                -- Shield
+                SDL.KeyDown Keysym{symKey=SDLK_SPACE} -> 
+                    addAction otherActsRef ToggleShield
+                -- Movement
                 SDL.KeyDown Keysym{symKey=SDLK_w} -> do
                     modStateL gsKeysDown (+1)
                     addAction otherActsRef $ Move $ Just North
@@ -238,8 +273,6 @@ gameLoop delta sprites = flip runContT return $ callCC $ \exit -> do
                 SDL.KeyDown Keysym{symKey=SDLK_d} -> do
                     modStateL gsKeysDown (+1)
                     addAction otherActsRef $ Move $ Just East
-                SDL.KeyDown Keysym{symKey=SDLK_SPACE} -> 
-                    addAction otherActsRef ToggleShield
                 SDL.KeyUp Keysym{symKey=key} -> 
                     when (key `elem` [SDLK_w,SDLK_s,SDLK_a,SDLK_d]) $ do
                         modStateL gsKeysDown $ subtract 1
@@ -252,3 +285,38 @@ gameLoop delta sprites = flip runContT return $ callCC $ \exit -> do
             return $ (incActs . otherActs) []
           where addAction ioRef action =
                     lift2 $ modifyIORef ioRef (.(action:))
+
+-- | Blits to center screen and returns dirty rectangle
+blitCenter :: SDL.Surface -> IO SDL.Rect
+blitCenter surf = do
+    screen <- SDL.getVideoSurface
+    (sw, sh) <- getScreenSize
+    let pxlfmt = SDL.surfaceGetPixelFormat screen
+    black <- SDL.mapRGB pxlfmt 0 0 0
+    let tw = SDL.surfaceGetWidth surf
+    let th = SDL.surfaceGetHeight surf
+    let tRect = SDL.Rect (sw `div` 2 - tw `div` 2) 
+                    ((sh - header) `div` 2 - th `div` 2 + header) tw th
+    flip (SDL.fillRect screen) black $ Just $ SDL.Rect 
+        (getL rectXL tRect - 1) (getL rectYL tRect - 1) (tw + 2) (th + 2)
+    SDL.blitSurface surf Nothing screen $ Just tRect
+    return tRect
+
+pause :: FontMap -> IO Int
+pause fonts = execStateT pauseLoop 0
+  where pauseLoop :: StateT Int IO ()
+        pauseLoop = do
+            event <- lift SDL.pollEvent
+            case event of
+                SDL.Quit -> return ()
+                SDL.KeyDown Keysym{symKey=SDLK_ESCAPE} -> return ()
+                SDL.KeyDown Keysym{symKey=SDLK_p} -> return ()
+                SDL.KeyDown Keysym{symKey=key} -> do
+                    whenMoveKey key (+1)
+                    pauseLoop
+                SDL.KeyUp Keysym{symKey=key} -> do
+                    whenMoveKey key (subtract 1)
+                    pauseLoop
+                _ -> pauseLoop
+        whenMoveKey key inc =
+            when (key `elem` [SDLK_w,SDLK_s,SDLK_a,SDLK_d]) $ modify inc
