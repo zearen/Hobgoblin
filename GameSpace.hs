@@ -73,17 +73,7 @@ gsUpdate delta acts = do
     getStateL gsStamina >>=
         flip when (modStateL gsStamina (+delta)) . (<100)
     -- Check if we need to move
-    getStateL gsMove >>= maybe (return ()) (\dir -> do
-        pace <- getStateL gsPace
-        stamina <- getStateL gsStamina
-        pace <- if pace <= floor stamina
-                  then return pace
-                  else do
-                    setStateL gsPace 1
-                    return 1
-        modStateL gsStamina $ subtract $ fromIntegral pace * delta / 2
-        modStateL gsLocation $ incPoint dir $ fromIntegral pace * delta
-        )
+    getStateL gsMove >>= maybe (return ()) movePlayer
     mapM_ (gsDoAction delta) acts
     shield <- handleShield
     (hit, missed) <- gsPartitionGoblins
@@ -112,6 +102,16 @@ gsUpdate delta acts = do
               then when (power < 0) $ setStateL gsShield False
               else when (power > 100) $ setStateL gsPower 100
             getStateL gsShield
+        movePlayer dir = do
+            pace <- getStateL gsPace
+            stamina <- getStateL gsStamina
+            pace <- if pace <= floor stamina
+                      then return pace
+                      else do
+                        setStateL gsPace 1
+                        return 1
+            modStateL gsStamina $ subtract $ fromIntegral pace * delta / 2
+            modStateL gsLocation $ incPoint dir $ fromIntegral pace * delta
 
 -- | Performs the specified game action
 gsDoAction :: Monad m => Double -> Action -> GameState m ()

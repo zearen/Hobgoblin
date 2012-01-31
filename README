@@ -1,19 +1,19 @@
-$ ghc -threaded Main.hs
-$ ./Main.hs
+Rough guide on how to run.
 
-> Install deps from cabal until ghc stops yelling at you.
+$ mkdir Hobgoblin
+$ cd Hobgoblin
+$ git init
+$ git remote add github git@github.com:zearen-wover/Hobgoblin.git
+$ git pull github master
+$ cabal configure
+$ cabal build
+$ cabal install
+$ hobgoblin
 
-Dependendies I'm aware of:
-
-state
-random
-data-lens
-data-lens-template
-SDL
-SDL-image
-SDL-ttf
-
-cabal build coming soon™
+Hobgoblin was a quick game created to try SDL in Haskell.  The game is
+still in development, but the core functionality is present.  Feel free
+to hack it at you discretion.  I hope I provided a proper license, if
+not contact me.  I would love to learn about proper licensing.
 
 Real quick how-to-play
 

@@ -9,6 +9,7 @@
 module Util
     ( (??)
     , (.:)
+    , (<.>)
     , getStateL
     , setStateL
     , modStateL
@@ -25,6 +26,11 @@ import Control.Monad.State.Class
 
 (.:) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
 (.:) = (.).(.)
+
+(<.>) :: Lens a b -> Lens b c -> Lens a c
+lens1 <.> lens2 = lens getter setter
+  where getter = getL lens2 . getL lens1
+        setter = modL lens1 . setL lens2
 
 getStateL :: MonadState s m => Lens s a -> m a
 getStateL theLens = get >>= return .  getL theLens
