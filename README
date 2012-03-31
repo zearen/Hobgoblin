@@ -3,8 +3,7 @@ Rough guide on how to run.
 $ mkdir Hobgoblin
 $ cd Hobgoblin
 $ git init
-$ git remote add github git@github.com:zearen-wover/Hobgoblin.git
-$ git pull github master
+$ git clone github git://github.com/zearen-wover/Hobgoblin
 $ cabal configure
 $ cabal build
 $ cabal install
