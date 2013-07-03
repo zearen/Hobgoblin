@@ -1,13 +1,12 @@
 Rough guide on how to run.
 
-$ mkdir Hobgoblin
+
+$ git clone git://github.com/zearen-wover/Hobgoblin
 $ cd Hobgoblin
-$ git init
-$ git clone github git://github.com/zearen-wover/Hobgoblin
 $ cabal configure
 $ cabal build
 $ cabal install
-$ hobgoblin
+$ ./hobgoblin
 
 Hobgoblin was a quick game created to try SDL in Haskell.  The game is
 still in development, but the core functionality is present.  Feel free
