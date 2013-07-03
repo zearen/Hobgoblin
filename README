@@ -5,7 +5,7 @@ $ git clone git://github.com/zearen-wover/Hobgoblin
 $ cd Hobgoblin
 $ cabal configure
 $ cabal build
-$ cabal install
+$ cabal install --bindir=.
 $ ./hobgoblin
 
 Hobgoblin was a quick game created to try SDL in Haskell.  The game is
